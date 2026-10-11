@@ -91,9 +91,14 @@ Groq の無料枠は 1 分あたり 20 回・1 時間あたり音声 7200 秒・
 
 - fn を押しても反応しない：ターミナルで次を実行して VSCode を再読み込みする
   ```
-  xattr -dr com.apple.quarantine ~/.vscode/extensions/kougoto.jp-voice-input-*
+  xattr -dr com.apple.quarantine ~/.vscode/extensions/yuukibk.jp-voice-input-*
   ```
 - エラーの詳細：出力パネルの「日本語音声入力」を見る
+
+## 以前の版（作者ID: kougoto）から更新した方へ
+
+v0.8.0 で作者IDを `kougoto` から `yuukibk` に変えました。更新すると古い版は自動で外れ、「再読み込み」を押すと新しい版に切り替わります。
+API キーは拡張機能ごとに保存されるため、切り替えたあとに 1 回だけ入れ直してください（`Cmd+Shift+P` →「日本語音声入力: APIキーを設定」）。
 
 ## 開発
 
@@ -103,3 +108,9 @@ Groq の無料枠は 1 分あたり 20 回・1 時間あたり音声 7200 秒・
 
 - `extension.js`：VSCode 拡張本体（録音の制御・文字起こし・入力・途中表示・自動更新）
 - `helper/main.swift`：常駐ヘルパー（fn キーの検知、録音、浮かぶ窓）
+
+## 作者・ライセンス
+
+作者：Yuuki Bikai（[@yuukiBK](https://github.com/yuukiBK)）
+
+[MIT License](LICENSE) で公開しています。自由に使ったり直したりして構いません（著作権表示とライセンス文は残してください）。無保証です。

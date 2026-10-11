@@ -90,7 +90,7 @@ function startHelper() {
   h.on('error', (e) => {
     log.appendLine(`[helper] 起動できません: ${e.message}`);
     vscode.window.showErrorMessage(
-      `音声入力: 録音プログラムを起動できません（${e.code || e.message}）。ターミナルで xattr -dr com.apple.quarantine ~/.vscode/extensions/kougoto.jp-voice-input-* を実行して VSCode を再読み込みしてください。`
+      `音声入力: 録音プログラムを起動できません（${e.code || e.message}）。ターミナルで xattr -dr com.apple.quarantine ~/.vscode/extensions/yuukibk.jp-voice-input-* を実行して VSCode を再読み込みしてください。`
     );
   });
   h.on('exit', (code, signal) => {
@@ -724,7 +724,39 @@ function whatsNewHtml(entries) {
 </body></html>`;
 }
 
+// 作者IDを kougoto → yuukibk に変えたときの移行。古い版が残っていたら外して、再読み込みを促す。
+// 同じコマンドを二重に登録すると失敗するので、古い版がいる間はこちらは何も始めない。
+const OLD_ID = 'kougoto.jp-voice-input';
+
+async function migrateFromOldId(context) {
+  try {
+    await vscode.commands.executeCommand('workbench.extensions.uninstallExtension', OLD_ID);
+  } catch (e) {
+    // すでに外す途中なら気にしない
+  }
+  const pick = await vscode.window.showInformationMessage(
+    '日本語音声入力の作者IDが変わったため、古い版を外しました。再読み込みすると新しい版に切り替わります（APIキーの入れ直しが1回だけ必要です）。',
+    '再読み込み'
+  );
+  if (pick) vscode.commands.executeCommand('workbench.action.reloadWindow');
+}
+
+async function remindApiKey() {
+  const p = provider();
+  if (await ctx.secrets.get(p.secret)) return;
+  const pick = await vscode.window.showWarningMessage(
+    `日本語音声入力: ${p.label} の APIキーが未設定です。設定すると fn キーで音声入力できます。`,
+    'APIキーを設定'
+  );
+  if (pick) setApiKey();
+}
+
 function activate(context) {
+  const old = vscode.extensions.getExtension(OLD_ID);
+  if (old && old.id !== context.extension.id) {
+    migrateFromOldId(context);
+    return;
+  }
   ctx = context;
   log = vscode.window.createOutputChannel('日本語音声入力');
   status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 1000);
@@ -778,6 +810,7 @@ function activate(context) {
 
   startHelper();
   maybeShowWhatsNew();
+  remindApiKey();
   if (cfg('autoUpdate')) setTimeout(() => checkUpdate(false), 5000);
 }
 
