@@ -1,0 +1,201 @@
+{
+  "name": "jp-voice-input",
+  "displayName": "日本語音声入力 (Whisper)",
+  "description": "fnキーを押している間だけ録音し、Groq/OpenAIで日本語に文字起こしして Claude Code のチャット欄に入れる",
+  "version": "0.6.0",
+  "publisher": "kougoto",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "jpVoice.toggle",
+        "title": "日本語音声入力: 録音開始/停止"
+      },
+      {
+        "command": "jpVoice.cancel",
+        "title": "日本語音声入力: 録音を取り消す"
+      },
+      {
+        "command": "jpVoice.setApiKey",
+        "title": "日本語音声入力: APIキーを設定"
+      },
+      {
+        "command": "jpVoice.copyLast",
+        "title": "日本語音声入力: 最後の文字起こしをコピー"
+      },
+      {
+        "command": "jpVoice.showUsage",
+        "title": "日本語音声入力: 使用量を表示"
+      },
+      {
+        "command": "jpVoice.chooseStyle",
+        "title": "日本語音声入力: 途中表示の見せ方を切り替え"
+      },
+      {
+        "command": "jpVoice.checkUpdate",
+        "title": "日本語音声入力: 更新を確認"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "jpVoice.toggle",
+        "key": "cmd+shift+space"
+      },
+      {
+        "command": "jpVoice.cancel",
+        "key": "escape",
+        "when": "jpVoice.recording"
+      }
+    ],
+    "configuration": {
+      "title": "日本語音声入力",
+      "properties": {
+        "jpVoice.provider": {
+          "type": "string",
+          "enum": [
+            "groq",
+            "openai"
+          ],
+          "enumDescriptions": [
+            "Groq（無料枠あり・Whisper large-v3・高速）",
+            "OpenAI（gpt-4o-transcribe・従量課金）"
+          ],
+          "default": "groq",
+          "description": "文字起こしに使うサービス。キーはサービスごとに別々に保存される"
+        },
+        "jpVoice.hotkey": {
+          "type": "string",
+          "enum": [
+            "fn",
+            "rightOption",
+            "rightCommand",
+            "off"
+          ],
+          "enumDescriptions": [
+            "fn（🌐）キー",
+            "右Option（US配列のみ）",
+            "右command",
+            "使わない（ステータスバー/Cmd+Shift+Spaceのみ）"
+          ],
+          "default": "fn",
+          "description": "押している間だけ録音するキー（VSCodeが前面にあるときのみ）"
+        },
+        "jpVoice.target": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "editor"
+          ],
+          "enumDescriptions": [
+            "Claude Code のチャット入力欄に入れる",
+            "今カーソルがある場所に入れる"
+          ],
+          "default": "claude",
+          "description": "文字起こし結果を入れる場所"
+        },
+        "jpVoice.model": {
+          "type": "string",
+          "default": "",
+          "description": "モデルを上書きする場合のみ指定（空欄なら Groq: whisper-large-v3 / OpenAI: gpt-4o-transcribe）"
+        },
+        "jpVoice.vocabulary": {
+          "type": "string",
+          "default": "Claude Code, VSCode, GitHub, API, Python, JavaScript, commit, push",
+          "description": "よく使う固有名詞・専門用語（カンマ区切り）。認識精度が上がる"
+        },
+        "jpVoice.minSeconds": {
+          "type": "number",
+          "default": 0.4,
+          "description": "これより短い録音は誤操作として捨てる（秒）"
+        },
+        "jpVoice.preview": {
+          "type": "boolean",
+          "default": true,
+          "description": "話している途中も文字起こしして表示する（無料枠・料金を多めに使う）"
+        },
+        "jpVoice.previewInterval": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "description": "途中表示を更新する間隔（秒）"
+        },
+        "jpVoice.previewStyle": {
+          "type": "string",
+          "enum": [
+            "hud",
+            "notification",
+            "panel"
+          ],
+          "enumDescriptions": [
+            "浮かぶ窓（画面中央上に半透明の窓）",
+            "VSCodeの通知",
+            "下のパネルの「音声入力」タブ"
+          ],
+          "default": "hud",
+          "description": "途中表示の見せ方（コマンド「途中表示の見せ方を切り替え」でも変えられる）"
+        },
+        "jpVoice.hudPosition": {
+          "type": "string",
+          "enum": [
+            "top",
+            "bottom"
+          ],
+          "enumDescriptions": [
+            "画面の上",
+            "画面の下"
+          ],
+          "default": "top",
+          "description": "浮かぶ窓を出す位置"
+        },
+        "jpVoice.previewChars": {
+          "type": "number",
+          "default": 36,
+          "minimum": 10,
+          "description": "途中表示を「通知」にしたときに出す文字数（末尾から）。画面が広ければ増やせる"
+        },
+        "jpVoice.autoUpdate": {
+          "type": "boolean",
+          "default": true,
+          "description": "起動時に GitHub の新しい版を確認する"
+        },
+        "jpVoice.previewMaxPerMinute": {
+          "type": "number",
+          "default": 15,
+          "minimum": 1,
+          "description": "途中表示を含めた送信が直近1分でこの回数に達したら途中表示を休む（Groq 無料枠の上限は1分20回）"
+        }
+      }
+    },
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "jpVoicePanel",
+          "title": "音声入力",
+          "icon": "media/mic.svg"
+        }
+      ]
+    },
+    "views": {
+      "jpVoicePanel": [
+        {
+          "type": "webview",
+          "id": "jpVoice.previewView",
+          "name": "途中表示"
+        }
+      ]
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yuukiBK/jp-voice-input"
+  }
+}

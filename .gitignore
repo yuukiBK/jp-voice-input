@@ -1,0 +1,4 @@
+*.vsix
+helper/voicehelper
+node_modules/
+.DS_Store
