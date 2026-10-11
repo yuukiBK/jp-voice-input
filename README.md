@@ -10,6 +10,8 @@ fn キーを押している間だけ録音し、Whisper で日本語に文字起
 - 対応：macOS 11 以降（Intel / Apple Silicon）。Windows には対応していません
 - Claude Code が入っていなくても、エディタのカーソル位置に入れるモードで使えます
 
+![fn を押しながら話すと、話している間も文字が出て、離すとチャット欄に入る](docs/demo.gif)
+
 > このツールは個人が作った非公式のもので、Anthropic・OpenAI・Groq とは関係ありません。
 
 **English:** Push-to-talk dictation for VS Code on macOS, tuned for Japanese. Hold `fn`, speak, release — the audio is transcribed with Whisper (Groq or OpenAI) and pasted into the Claude Code chat input (or at the editor cursor), with a live preview while you speak. Unofficial; not affiliated with Anthropic, OpenAI or Groq.

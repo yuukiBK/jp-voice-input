@@ -2,3 +2,4 @@ helper/main.swift
 *.vsix
 build.sh
 .gitignore
+docs/
