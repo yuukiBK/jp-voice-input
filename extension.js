@@ -308,7 +308,7 @@ async function previewTick(sid) {
     const snap = await request('snapshot ' + tmpWav('preview'), (r) => (pendingSnapshot = r));
     if (!snap || !snap.file) return;
     try {
-      if (snap.seconds < 1 || sid !== session) return;
+      if (snap.seconds < 1 || sid !== session || isSilent(snap.file)) return;
       const text = await transcribe(snap.file, 'preview', snap.seconds);
       if (text && sid === session && state === 'recording') {
         previewText = text;
@@ -366,7 +366,7 @@ async function stopRecording() {
     setState('idle');
     return;
   }
-  if (result.seconds < cfg('minSeconds')) {
+  if (result.seconds < cfg('minSeconds') || isSilent(result.file)) {
     fs.unlink(result.file, () => {});
     endSession();
     setState('idle');
@@ -422,8 +422,10 @@ async function transcribe(file, kind, seconds) {
   form.append('file', new Blob([fs.readFileSync(file)], { type: 'audio/wav' }), 'audio.wav');
   form.append('model', cfg('model') || p.model);
   form.append('language', 'ja');
-  const vocab = (cfg('vocabulary') || '').trim();
-  form.append('prompt', `日本語の口語を、句読点を付けた自然な文章にしてください。${vocab ? `用語: ${vocab}` : ''}`);
+  // prompt は「直前に話された文章」として扱われるので、指示文は書かず用語の列挙だけにする
+  // （指示文を書くと、無音のときにそれがそのまま文字起こしとして返ってくる）
+  const prompt = buildPrompt();
+  if (prompt) form.append('prompt', prompt);
 
   const t0 = Date.now();
   requestTimes.push(t0);
@@ -440,9 +442,67 @@ async function transcribe(file, kind, seconds) {
     throw new Error(`${p.label} ${res.status}: ${msg}`);
   }
   const text = (JSON.parse(body).text || '').trim();
-  // 無音のときに Whisper 系が出しがちな定型文は捨てる
-  if (/^(ご視聴ありがとうございました|ありがとうございました|お疲れ様でした)[。.!！]?$/.test(text)) return '';
+  if (isHallucination(text, prompt)) {
+    log.appendLine(`[${kind}] 無音時の出力とみなして捨てました: ${text}`);
+    return '';
+  }
   return text;
+}
+
+function buildPrompt() {
+  const terms = (cfg('vocabulary') || '').split(/[,、，]/).map((t) => t.trim()).filter(Boolean);
+  return terms.length ? terms.join('、') + '。' : '';
+}
+
+const norm = (t) => t.replace(/[\s、。，．,.!！?？・:：「」『』()（）\-]/g, '').toLowerCase();
+
+// 無音や短い録音のときに Whisper が返しがちな「聞こえていない内容」を見分ける
+function isHallucination(text, prompt) {
+  if (!text) return true;
+  // 定型文
+  if (/^(ご視聴ありがとうございました|ありがとうございました|お疲れ様でした)[。.!！]?$/.test(text)) return true;
+  // 以前の版の指示文
+  if (/句読点を付けた自然な文章/.test(text)) return true;
+  // prompt（用語の列挙）をなぞっただけ。用語1語だけなら本当に話した可能性があるので残す
+  const t = norm(text);
+  const p = norm(prompt || '');
+  if (p && t.includes(p)) return true;
+  const terms = (cfg('vocabulary') || '').split(/[,、，]/).map((x) => norm(x)).filter(Boolean);
+  const hits = terms.filter((x) => t.includes(x)).length;
+  if (p && t.length >= 2 && p.includes(t) && hits >= 2) return true;
+  return false;
+}
+
+// WAV（16bit モノラル）を 50ms ごとに区切り、いちばん大きい区間の音量を返す
+function peakLevel(file) {
+  try {
+    const buf = fs.readFileSync(file);
+    const data = buf.subarray(44);
+    const win = 800; // 16kHz で 50ms
+    let peak = 0;
+    for (let off = 0; off + win * 2 <= data.length; off += win * 2) {
+      let sum = 0;
+      for (let i = 0; i < win; i++) {
+        const v = data.readInt16LE(off + i * 2);
+        sum += v * v;
+      }
+      peak = Math.max(peak, Math.sqrt(sum / win));
+    }
+    return peak;
+  } catch (e) {
+    return Infinity; // 読めなければ判定しない
+  }
+}
+
+function isSilent(file) {
+  const th = cfg('silenceThreshold');
+  if (!th) return false;
+  const level = peakLevel(file);
+  if (level < th) {
+    log.appendLine(`無音とみなして送りませんでした（最大音量 ${Math.round(level)} < ${th}）`);
+    return true;
+  }
+  return false;
 }
 
 function today() {

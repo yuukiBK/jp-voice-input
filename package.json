@@ -2,7 +2,7 @@
   "name": "jp-voice-input",
   "displayName": "日本語音声入力 (Whisper)",
   "description": "fnキーを押している間だけ録音し、Groq/OpenAIで日本語に文字起こしして Claude Code のチャット欄に入れる",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "publisher": "yuukibk",
   "author": {
     "name": "Yuuki Bikai (yuukiBK)",
@@ -181,6 +181,12 @@
           "default": 15,
           "minimum": 1,
           "description": "途中表示を含めた送信が直近1分でこの回数に達したら途中表示を休む（Groq 無料枠の上限は1分20回）"
+        },
+        "jpVoice.silenceThreshold": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "録音の最大音量（50msごとの実効値、16bit）がこれ未満なら無音とみなして送らない。0 で無効（初期設定）。環境の物音で誤判定しやすいので、使うときは出力パネルの記録を見ながら決める"
         }
       }
     },
