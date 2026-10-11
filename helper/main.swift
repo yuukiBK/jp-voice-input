@@ -48,7 +48,7 @@ func startEngine() -> Bool {
     if engine.isRunning { return true }
     let input = engine.inputNode
     let inFormat = input.outputFormat(forBus: 0)
-    guard inFormat.sampleRate > 0, let converter = AVAudioConverter(from: inFormat, to: outFormat) else {
+    guard inFormat.sampleRate > 0, inFormat.channelCount > 0, let converter = AVAudioConverter(from: inFormat, to: outFormat) else {
         emit("error マイクが見つかりません")
         return false
     }
@@ -92,6 +92,22 @@ func stopEngine() {
     engine.inputNode.removeTap(onBus: 0)
     engine.stop()
     audioQueue.sync { preroll.removeAll() }
+}
+
+// マイクの切り替え（AirPods の接続など）で音声系の設定が変わったら、いったん止めて次の録音で作り直す。
+// そのまま使い続けると形式の食い違いで落ちる。
+NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { _ in
+    idleStop?.cancel()
+    let wasRecording = recordPath != nil
+    if wasRecording {
+        recordPath = nil
+        audioQueue.sync {
+            recording = false
+            samples.removeAll()
+        }
+        emit("error マイクが切り替わったので録音を中断しました。もう一度話してください")
+    }
+    stopEngine()
 }
 
 func scheduleIdleStop() {

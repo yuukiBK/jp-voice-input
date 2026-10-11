@@ -76,15 +76,41 @@ function send(line) {
   if (helper) helper.stdin.write(line + '\n');
 }
 
+let helperRestarts = [];
+
 function startHelper() {
   const bin = path.join(ctx.extensionPath, 'helper', 'voicehelper');
-  helper = cp.spawn(bin, [cfg('hotkey') || 'fn'], { stdio: ['pipe', 'pipe', 'pipe'] });
-  const rl = readline.createInterface({ input: helper.stdout });
+  const h = cp.spawn(bin, [cfg('hotkey') || 'fn'], { stdio: ['pipe', 'pipe', 'pipe'] });
+  helper = h;
+  const rl = readline.createInterface({ input: h.stdout });
   rl.on('line', onHelperLine);
-  helper.stderr.on('data', () => {});
-  helper.on('exit', () => {
+  h.stderr.on('data', (d) => log.appendLine('[helper] ' + String(d).trim()));
+  h.stdin.on('error', () => {});
+  // 起動できない（実行が止められた等）ときに拡張ごと落ちないよう受け止める
+  h.on('error', (e) => {
+    log.appendLine(`[helper] 起動できません: ${e.message}`);
+    vscode.window.showErrorMessage(
+      `音声入力: 録音プログラムを起動できません（${e.code || e.message}）。ターミナルで xattr -dr com.apple.quarantine ~/.vscode/extensions/kougoto.jp-voice-input-* を実行して VSCode を再読み込みしてください。`
+    );
+  });
+  h.on('exit', (code, signal) => {
+    if (helper !== h) return; // 意図して止めたもの
     helper = null;
-    if (state !== 'idle') setState('idle');
+    if (state !== 'idle') {
+      endSession();
+      setState('idle');
+    }
+    if (code === 0) return;
+    log.appendLine(`[helper] 終了しました code=${code} signal=${signal}`);
+    // 落ちたら自動で立ち上げ直す（1分に3回まで）
+    const now = Date.now();
+    helperRestarts = helperRestarts.filter((t) => t > now - 60000);
+    if (helperRestarts.length < 3) {
+      helperRestarts.push(now);
+      setTimeout(() => { if (!helper) startHelper(); }, 1000);
+    } else {
+      vscode.window.showErrorMessage('音声入力: 録音プログラムが繰り返し止まりました。出力パネルの「日本語音声入力」の内容を教えてください。');
+    }
   });
   send('perm');
 }
@@ -740,9 +766,9 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (!e.affectsConfiguration('jpVoice.hotkey')) return;
       if (helper) {
-        helper.removeAllListeners('exit');
-        helper.kill();
+        const old = helper;
         helper = null;
+        old.kill();
       }
       endSession();
       setState('idle');
