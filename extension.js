@@ -174,13 +174,13 @@ function tmpWav(kind) {
 // MARK: - 途中表示
 
 const STYLES = [
+  { id: 'notification', label: '通知', detail: '右下の VSCode 通知に末尾をひっそり表示（初期設定）' },
   { id: 'hud', label: '浮かぶ窓', detail: '画面の上（または下）中央に半透明の窓。全文が折り返して見える' },
-  { id: 'notification', label: '通知', detail: '右下の VSCode 通知に末尾を表示' },
   { id: 'panel', label: '専用パネル', detail: '下のパネルの「音声入力」タブに全文を大きく表示' },
 ];
 
 function style() {
-  return STYLES.some((x) => x.id === cfg('previewStyle')) ? cfg('previewStyle') : 'hud';
+  return STYLES.some((x) => x.id === cfg('previewStyle')) ? cfg('previewStyle') : 'notification';
 }
 
 function tail(text, max) {
