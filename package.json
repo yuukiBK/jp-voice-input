@@ -2,7 +2,7 @@
   "name": "jp-voice-input",
   "displayName": "日本語音声入力 (Whisper)",
   "description": "fnキーを押している間だけ録音し、Groq/OpenAIで日本語に文字起こしして Claude Code のチャット欄に入れる",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "kougoto",
   "engines": {
     "vscode": "^1.90.0"
@@ -43,6 +43,10 @@
       {
         "command": "jpVoice.checkUpdate",
         "title": "日本語音声入力: 更新を確認"
+      },
+      {
+        "command": "jpVoice.whatsNew",
+        "title": "日本語音声入力: アップデート情報を見る"
       }
     ],
     "keybindings": [

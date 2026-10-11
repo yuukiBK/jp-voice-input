@@ -180,7 +180,6 @@ function openPreview() {
     );
   } else if (st === 'panel') {
     panelProvider.post({ type: 'start' });
-    panelProvider.openedByUs = !(panelProvider.view && panelProvider.view.visible);
     panelProvider.reveal();
   }
 }
@@ -212,9 +211,8 @@ function closePreview(finalText) {
   preview = null;
   if (st === 'panel') {
     panelProvider.post({ type: 'done', text: finalText || '' });
-    // 録音のために開いたパネルは、結果を一瞬見せてから閉じる
-    if (panelProvider.openedByUs) {
-      panelProvider.openedByUs = false;
+    // 結果を一瞬見せてからパネルを閉じる（ずっと出しておかない）
+    {
       setTimeout(() => {
         if (state === 'idle' && panelProvider.view && panelProvider.view.visible) {
           vscode.commands.executeCommand('workbench.action.closePanel');
@@ -227,7 +225,6 @@ function closePreview(finalText) {
 // 下のパネルの「音声入力」タブ
 const panelProvider = {
   view: null,
-  openedByUs: false,
   last: { type: 'idle' },
   resolveWebviewView(view) {
     this.view = view;
@@ -572,6 +569,135 @@ async function checkUpdate(manual) {
   }
 }
 
+// MARK: - アップデート情報
+
+const CHANGELOG = require('./changelog');
+
+function esc(t) {
+  return String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+function maybeShowWhatsNew() {
+  const current = ctx.extension.packageJSON.version;
+  const seen = ctx.globalState.get('jpVoice.lastSeenVersion');
+  if (seen === current) return;
+  ctx.globalState.update('jpVoice.lastSeenVersion', current);
+  // 初めて入れたときは最新の1件、更新したときは見ていない版をまとめて
+  const entries = seen ? CHANGELOG.filter((e) => newer(e.version, seen)) : CHANGELOG.slice(0, 1);
+  if (entries.length) showWhatsNew(entries);
+}
+
+function showWhatsNew(entries) {
+  const panel = vscode.window.createWebviewPanel(
+    'jpVoice.whatsNew',
+    'アップデート情報',
+    { viewColumn: vscode.ViewColumn.Active, preserveFocus: true },
+    { enableScripts: true }
+  );
+  panel.iconPath = vscode.Uri.file(path.join(ctx.extensionPath, 'media', 'mic.svg'));
+  panel.webview.onDidReceiveMessage((m) => {
+    if (m === 'close') panel.dispose();
+    if (m === 'history') {
+      panel.dispose();
+      showWhatsNew(CHANGELOG);
+    }
+  });
+  panel.webview.html = whatsNewHtml(entries);
+}
+
+function whatsNewHtml(entries) {
+  const tagClass = { NEW: 'new', '改善': 'imp', '修正': 'fix' };
+  let i = 0;
+  const sections = entries
+    .map((e, idx) => {
+      const cards = e.items
+        .map(
+          (it) => `
+        <div class="card" style="animation-delay:${0.25 + 0.08 * i++}s">
+          <span class="tag ${tagClass[it.tag] || 'new'}">${esc(it.tag)}</span>
+          <div class="ct">${esc(it.title)}</div>
+          <div class="cb">${esc(it.body)}</div>
+        </div>`
+        )
+        .join('');
+      return `
+      <section class="${idx === 0 ? 'latest' : 'older'}">
+        <div class="ver"><span class="vlabel">Ver.</span>${esc(e.version)}<span class="date">${esc(e.date)}</span></div>
+        <h2>${esc(e.title)}</h2>
+        <div class="cards">${cards}</div>
+      </section>`;
+    })
+    .join('');
+  const showHistory = entries.length < CHANGELOG.length;
+  return `<!doctype html><html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0d0f14; --panel: #161a22; --line: rgba(255,255,255,.08);
+    --text: #f2f4f8; --sub: #a3abba; --accent: #ff4d3d; --accent2: #ffb238;
+    --new: #ff4d3d; --imp: #3d8bff; --fix: #2fbf71;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif; }
+  .hero { position: relative; overflow: hidden; padding: 44px 32px 36px;
+          background: linear-gradient(115deg, #1a0f12 0%, #2a1114 45%, #0d0f14 100%); border-bottom: 1px solid var(--line); }
+  .hero::before { content: ""; position: absolute; inset: -50% -10%;
+          background: repeating-linear-gradient(115deg, transparent 0 38px, rgba(255,77,61,.07) 38px 76px);
+          animation: slide 1s ease-out both; }
+  .hero::after { content: ""; position: absolute; left: 0; top: 0; height: 4px; width: 100%;
+          background: linear-gradient(90deg, var(--accent), var(--accent2)); transform-origin: left; animation: bar .6s .1s ease-out both; }
+  .kicker { position: relative; font-size: 13px; font-weight: 800; letter-spacing: .32em; color: var(--accent2); animation: up .5s ease-out both; }
+  .big { position: relative; margin: 6px 0 0; font-size: 52px; font-weight: 900; font-style: italic; letter-spacing: .02em; line-height: 1;
+         background: linear-gradient(90deg, #fff, #ffd9d4); -webkit-background-clip: text; background-clip: text; color: transparent;
+         animation: punch .55s .1s cubic-bezier(.2,1.4,.4,1) both; }
+  .lead { position: relative; margin-top: 12px; color: var(--sub); font-size: 13px; animation: up .5s .2s ease-out both; }
+  main { max-width: 760px; margin: 0 auto; padding: 8px 24px 40px; }
+  section { padding: 28px 0 8px; border-bottom: 1px solid var(--line); }
+  section:last-child { border-bottom: 0; }
+  .ver { display: flex; align-items: baseline; gap: 6px; font-size: 30px; font-weight: 900; font-style: italic; }
+  .vlabel { font-size: 14px; color: var(--accent); font-style: normal; font-weight: 800; }
+  .date { margin-left: auto; font-size: 12px; color: var(--sub); font-style: normal; font-weight: 500; }
+  .older .ver { font-size: 22px; color: var(--sub); }
+  h2 { margin: 4px 0 18px; font-size: 18px; font-weight: 700; }
+  .older h2 { font-size: 15px; color: var(--sub); }
+  .cards { display: grid; gap: 12px; }
+  .card { position: relative; padding: 16px 18px 16px 18px; background: var(--panel); border: 1px solid var(--line);
+          border-radius: 12px; animation: card .45s ease-out both; }
+  .card::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: var(--c, var(--new)); }
+  .card:has(.imp) { --c: var(--imp); } .card:has(.fix) { --c: var(--fix); }
+  .tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; letter-spacing: .08em; color: #fff; }
+  .tag.new { background: var(--new); } .tag.imp { background: var(--imp); } .tag.fix { background: var(--fix); }
+  .ct { margin-top: 8px; font-size: 16px; font-weight: 700; }
+  .cb { margin-top: 6px; font-size: 13.5px; line-height: 1.75; color: var(--sub); }
+  .actions { display: flex; gap: 10px; justify-content: center; padding: 8px 24px 44px; }
+  button { font: inherit; font-size: 14px; font-weight: 700; padding: 11px 28px; border-radius: 999px; cursor: pointer; border: 1px solid var(--line); }
+  .ok { background: linear-gradient(90deg, var(--accent), #ff7a3d); color: #fff; border: 0; }
+  .ok:hover { filter: brightness(1.08); }
+  .ghost { background: transparent; color: var(--sub); }
+  .ghost:hover { color: var(--text); }
+  @keyframes slide { from { transform: translateX(-12%); opacity: 0; } }
+  @keyframes bar { from { transform: scaleX(0); } }
+  @keyframes up { from { transform: translateY(8px); opacity: 0; } }
+  @keyframes punch { from { transform: scale(1.35) skewX(-8deg); opacity: 0; } }
+  @keyframes card { from { transform: translateY(10px); opacity: 0; } }
+  @media (max-width: 520px) { .hero { padding: 32px 20px 26px; } .big { font-size: 38px; } main { padding: 0 16px 32px; } }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
+</style></head><body>
+  <div class="hero">
+    <div class="kicker">UPDATE</div>
+    <div class="big">アップデート情報</div>
+    <div class="lead">日本語音声入力 が新しくなりました</div>
+  </div>
+  <main>${sections}</main>
+  <div class="actions">
+    ${showHistory ? '<button class="ghost" onclick="post(\'history\')">これまでの更新</button>' : ''}
+    <button class="ok" onclick="post('close')">OK</button>
+  </div>
+<script>const vscode = acquireVsCodeApi(); function post(m) { vscode.postMessage(m); }</script>
+</body></html>`;
+}
+
 function activate(context) {
   ctx = context;
   log = vscode.window.createOutputChannel('日本語音声入力');
@@ -601,6 +727,7 @@ function activate(context) {
     vscode.commands.registerCommand('jpVoice.showUsage', showUsage),
     vscode.commands.registerCommand('jpVoice.chooseStyle', chooseStyle),
     vscode.commands.registerCommand('jpVoice.checkUpdate', () => checkUpdate(true)),
+    vscode.commands.registerCommand('jpVoice.whatsNew', () => showWhatsNew(CHANGELOG)),
     vscode.window.registerWebviewViewProvider('jpVoice.previewView', panelProvider, {
       webviewOptions: { retainContextWhenHidden: true },
     }),
@@ -624,6 +751,7 @@ function activate(context) {
   );
 
   startHelper();
+  maybeShowWhatsNew();
   if (cfg('autoUpdate')) setTimeout(() => checkUpdate(false), 5000);
 }
 
