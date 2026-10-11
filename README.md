@@ -1,10 +1,18 @@
 # 日本語音声入力 for VSCode
 
-fn キーを押している間だけ録音し、Whisper で日本語に文字起こしして、Claude Code のチャット欄に入れる VSCode 拡張です。
+[![Release](https://img.shields.io/github/v/release/yuukiBK/jp-voice-input)](https://github.com/yuukiBK/jp-voice-input/releases/latest)
+![macOS](https://img.shields.io/badge/macOS-11%2B-black)
+
+fn キーを押している間だけ録音し、Whisper で日本語に文字起こしして、VSCode の Claude Code のチャット欄に入れる拡張です。
 話している途中の文字も画面に出るので、聞き取れているかを確かめながら話せます。
 
-- 文字起こし：Groq（無料枠あり）または OpenAI
+- 文字起こし：Groq（無料枠あり、`whisper-large-v3`）または OpenAI（`gpt-4o-transcribe`）
 - 対応：macOS 11 以降（Intel / Apple Silicon）。Windows には対応していません
+- Claude Code が入っていなくても、エディタのカーソル位置に入れるモードで使えます
+
+> このツールは個人が作った非公式のもので、Anthropic・OpenAI・Groq とは関係ありません。
+
+**English:** Push-to-talk dictation for VS Code on macOS, tuned for Japanese. Hold `fn`, speak, release — the audio is transcribed with Whisper (Groq or OpenAI) and pasted into the Claude Code chat input (or at the editor cursor), with a live preview while you speak. Unofficial; not affiliated with Anthropic, OpenAI or Groq.
 
 ## インストール
 
@@ -62,6 +70,17 @@ fn キーを押している間だけ録音し、Whisper で日本語に文字起
 | `jpVoice.vocabulary` | — | よく使う固有名詞（カンマ区切り）。足すと当たりやすくなる |
 | `jpVoice.preview` | `true` | 途中表示のオン・オフ |
 | `jpVoice.previewInterval` | `3` | 途中表示の更新間隔（秒） |
+
+## プライバシーと動作について
+
+- **音声の送り先**：話した音声は、選んだサービス（Groq か OpenAI）にだけ送られ、文字にして返されます。それ以外には送りません。
+  Groq は既定では送られたデータを保存しませんが、障害対応や不正利用の調査のために最大 30 日ログを残すことがあると説明しています（[Your Data in GroqCloud](https://console.groq.com/docs/your-data)）。設定でゼロ保存（ZDR）にもできます。
+- **周りの人の声**：会議中などに使うと、周りの人の声も一緒に送られます。必要に応じて一言断ってから使ってください。
+- **マイク**：録音を止めたあとも 30 秒はマイクを開いたままにしています（次の録音の頭が欠けないようにするため）。その間はメニューバーにマイク使用中の印が出ます。録音していない間の音は、直前 0.3 秒ぶんをメモリに置いておくだけで、保存も送信もしません。
+- **クリップボード**：チャット欄に入れるときに一瞬だけクリップボードを使い、すぐ元の内容に戻します。
+- **API キー**：Mac のキーチェーン（VSCode の SecretStorage）に保存し、ファイルや設定には書きません。
+- **キーの検知**：fn キーは修飾キーの状態を読むだけで、ほかのキー入力は記録しません（入力監視の権限は不要です）。
+- **更新の確認**：起動時に GitHub の Releases に最新版があるかだけを問い合わせます（`jpVoice.autoUpdate` で止められます）。
 
 ## 使用量の確認
 
