@@ -2,7 +2,7 @@
   "name": "jp-voice-input",
   "displayName": "日本語音声入力 (Whisper)",
   "description": "fnキーを押している間だけ録音し、Groq/OpenAIで日本語に文字起こしして Claude Code のチャット欄に入れる",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "publisher": "yuukibk",
   "author": {
     "name": "Yuuki Bikai (yuukiBK)",

@@ -184,15 +184,23 @@ let (keyMask, otherMods): (UInt64, CGEventFlags) = {
 let comboKeys: [CGKeyCode] = [123, 124, 125, 126, 115, 119, 116, 121, 117, 51,
                               122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111]
 var held = false
+// macOS は矢印キーなどを押すと fn の印（maskSecondaryFn）も立て、離したあとも次のキー操作まで残す（数秒残ることもある）。
+// その残った印を fn と取り違えないよう、印が立っている間に矢印などを見たら、印が一度消えるまで録音を始めない
+var stale = false
 
 let timer = DispatchSource.makeTimerSource(queue: .main)
 timer.schedule(deadline: .now(), repeating: .milliseconds(25))
 timer.setEventHandler {
     let flags = CGEventSource.flagsState(.combinedSessionState)
     let down = (flags.rawValue & keyMask) != 0
-    let alone = flags.intersection(otherMods).isEmpty
-        && !comboKeys.contains { CGEventSource.keyState(.combinedSessionState, key: $0) }
-    if !held && down && alone {
+    let combo = comboKeys.contains { CGEventSource.keyState(.combinedSessionState, key: $0) }
+    if !down {
+        stale = false
+    } else if combo && !held {
+        stale = true
+    }
+    let alone = flags.intersection(otherMods).isEmpty && !combo
+    if !held && down && alone && !stale {
         held = true
         emit("down")
     } else if held && !down {
