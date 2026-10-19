@@ -193,7 +193,7 @@ timer.schedule(deadline: .now(), repeating: .milliseconds(25))
 // fn キーそのもの（キーコード 63）の押下状態。矢印キーで立つ印に左右されない。
 // 環境によっては取れないかもしれないので、一度でも押下が取れたらこちらを使い、それまでは印で判定する
 let fnKeyCode: CGKeyCode = 63
-var fnKeyWorks = false
+var fnKeyWorks = CommandLine.arguments.contains("--fnkey")  // 前回までに使えると分かっていれば最初から使う
 
 timer.setEventHandler {
     let flags = CGEventSource.flagsState(.combinedSessionState)
@@ -201,6 +201,7 @@ timer.setEventHandler {
     if physical && !fnKeyWorks {
         fnKeyWorks = true
         FileHandle.standardError.write("fn キーの押下を直接検知できました。以後はこちらで判定します\n".data(using: .utf8)!)
+        emit("fnkey")
     }
     let down = fnKeyWorks ? physical : (flags.rawValue & keyMask) != 0
     let combo = comboKeys.contains { CGEventSource.keyState(.combinedSessionState, key: $0) }
