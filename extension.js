@@ -118,18 +118,32 @@ function startHelper() {
 function onHelperLine(line) {
   const [ev, ...rest] = line.split(' ');
   switch (ev) {
+    case 'stale':
+      log.appendLine(`${now()} [key] 矢印キーなどの直後のため、fn の印が消えるまで録音を始めません`);
+      break;
     case 'down':
-      if (cfg('hotkey') === 'off' || !vscode.window.state.focused || state !== 'idle') return;
+      if (cfg('hotkey') === 'off') return;
+      if (!vscode.window.state.focused) {
+        log.appendLine(`${now()} [key] fn を検知しましたが、VSCode が前面にないため無視しました`);
+        return;
+      }
+      if (state !== 'idle') {
+        log.appendLine(`${now()} [key] fn を検知しましたが、前の処理（${state}）の途中なので無視しました`);
+        return;
+      }
+      log.appendLine(`${now()} [key] fn 押下 → 録音開始`);
       pressedAt = Date.now();
       startRecording();
       break;
     case 'up':
       if (state !== 'recording' || !pressedAt) return;
+      log.appendLine(`${now()} [key] fn を離した（${((Date.now() - pressedAt) / 1000).toFixed(1)}秒）`);
       pressedAt = 0;
       stopRecording();
       break;
     case 'abort':
       if (state === 'recording' && pressedAt) {
+        log.appendLine(`${now()} [key] fn と一緒にほかのキーが押されたので取り消しました`);
         pressedAt = 0;
         cancelRecording();
       }
@@ -362,11 +376,15 @@ async function stopRecording() {
   stopPreviewLoop();
   const result = await request('stop', (r) => (pendingStop = r));
   if (!result || !result.file) {
+    log.appendLine(`${now()} [rec] 録音プログラムから結果が返ってきませんでした`);
+    notice('録音を受け取れませんでした。もう一度話してください');
     endSession();
     setState('idle');
     return;
   }
+  log.appendLine(`${now()} [rec] 録音終了 ${result.seconds.toFixed(1)}秒 最大音量 ${Math.round(peakLevel(result.file))}`);
   if (result.seconds < cfg('minSeconds') || isSilent(result.file)) {
+    if (result.seconds >= cfg('minSeconds')) notice('聞き取れませんでした（無音）');
     fs.unlink(result.file, () => {});
     endSession();
     setState('idle');
@@ -380,6 +398,8 @@ async function stopRecording() {
     if (text) {
       lastText = text;
       await insertText(text);
+    } else {
+      notice('聞き取れませんでした。もう一度話してください');
     }
   } catch (e) {
     vscode.window.showErrorMessage('音声入力: ' + e.message);
@@ -503,6 +523,16 @@ function isSilent(file) {
     return true;
   }
   return false;
+}
+
+function now() {
+  return new Date().toLocaleTimeString('ja-JP', { hour12: false });
+}
+
+// 右下のステータスバーに数秒だけ知らせる
+function notice(msg) {
+  vscode.window.setStatusBarMessage(`$(info) 音声入力: ${msg}`, 4000);
+  log.appendLine(`${now()} [notice] ${msg}`);
 }
 
 function today() {

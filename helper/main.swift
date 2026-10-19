@@ -190,13 +190,24 @@ var stale = false
 
 let timer = DispatchSource.makeTimerSource(queue: .main)
 timer.schedule(deadline: .now(), repeating: .milliseconds(25))
+// fn キーそのもの（キーコード 63）の押下状態。矢印キーで立つ印に左右されない。
+// 環境によっては取れないかもしれないので、一度でも押下が取れたらこちらを使い、それまでは印で判定する
+let fnKeyCode: CGKeyCode = 63
+var fnKeyWorks = false
+
 timer.setEventHandler {
     let flags = CGEventSource.flagsState(.combinedSessionState)
-    let down = (flags.rawValue & keyMask) != 0
+    let physical = hotkey == "fn" && CGEventSource.keyState(.combinedSessionState, key: fnKeyCode)
+    if physical && !fnKeyWorks {
+        fnKeyWorks = true
+        FileHandle.standardError.write("fn キーの押下を直接検知できました。以後はこちらで判定します\n".data(using: .utf8)!)
+    }
+    let down = fnKeyWorks ? physical : (flags.rawValue & keyMask) != 0
     let combo = comboKeys.contains { CGEventSource.keyState(.combinedSessionState, key: $0) }
-    if !down {
+    if fnKeyWorks || !down {
         stale = false
     } else if combo && !held {
+        if !stale { emit("stale") }
         stale = true
     }
     let alone = flags.intersection(otherMods).isEmpty && !combo
