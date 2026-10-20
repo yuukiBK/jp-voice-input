@@ -190,26 +190,29 @@ var stale = false
 
 let timer = DispatchSource.makeTimerSource(queue: .main)
 timer.schedule(deadline: .now(), repeating: .milliseconds(25))
-// fn キーそのもの（キーコード 63）の押下状態。矢印キーで立つ印に左右されない。
-// 環境によっては取れないかもしれないので、一度でも押下が取れたらこちらを使い、それまでは印で判定する
-let fnKeyCode: CGKeyCode = 63
-var fnKeyWorks = CommandLine.arguments.contains("--fnkey")  // 前回までに使えると分かっていれば最初から使う
+// 修飾キー（fn など）が最後に動いてからの秒数。矢印キーでは動かないので、矢印キーで残った fn の印と、
+// 本当に fn を押したことを見分けるのに使う（キーコード 63 の押下状態は実際には取れなかったので使わない）
+var lastFlagsAge = Double.greatestFiniteMagnitude
+var comboSeenAt = Date.distantPast  // 矢印キーなどを最後に見た時刻
 
 timer.setEventHandler {
     let flags = CGEventSource.flagsState(.combinedSessionState)
-    let physical = hotkey == "fn" && CGEventSource.keyState(.combinedSessionState, key: fnKeyCode)
-    if physical && !fnKeyWorks {
-        fnKeyWorks = true
-        FileHandle.standardError.write("fn キーの押下を直接検知できました。以後はこちらで判定します\n".data(using: .utf8)!)
-        emit("fnkey")
-    }
-    let down = fnKeyWorks ? physical : (flags.rawValue & keyMask) != 0
+    let down = (flags.rawValue & keyMask) != 0
     let combo = comboKeys.contains { CGEventSource.keyState(.combinedSessionState, key: $0) }
-    if fnKeyWorks || !down {
+    let age = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .flagsChanged)
+    if combo { comboSeenAt = Date() }
+    // 前回見たときより新しい修飾キーの動きがあり、それが矢印キーなどを離してから 0.1 秒以上あとに起きた
+    let modifierMoved = age < lastFlagsAge && Date().timeIntervalSince(comboSeenAt) - age > 0.1
+    lastFlagsAge = age
+    if !down {
         stale = false
     } else if combo && !held {
         if !stale { emit("stale") }
         stale = true
+    } else if stale && modifierMoved && !combo {
+        // 矢印キーの印が残っている間に fn が押された
+        stale = false
+        emit("unstale")
     }
     let alone = flags.intersection(otherMods).isEmpty && !combo
     if !held && down && alone && !stale {

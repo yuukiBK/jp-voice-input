@@ -80,7 +80,7 @@ let helperRestarts = [];
 
 function startHelper() {
   const bin = path.join(ctx.extensionPath, 'helper', 'voicehelper');
-  const h = cp.spawn(bin, [cfg('hotkey') || 'fn', ...(ctx.globalState.get('jpVoice.fnKeyWorks') ? ['--fnkey'] : [])], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const h = cp.spawn(bin, [cfg('hotkey') || 'fn'], { stdio: ['pipe', 'pipe', 'pipe'] });
   helper = h;
   const rl = readline.createInterface({ input: h.stdout });
   rl.on('line', onHelperLine);
@@ -118,9 +118,8 @@ function startHelper() {
 function onHelperLine(line) {
   const [ev, ...rest] = line.split(' ');
   switch (ev) {
-    case 'fnkey':
-      // fn キーそのものを直接検知できる Mac だと覚えておき、次回は最初からその方法で判定する
-      ctx.globalState.update('jpVoice.fnKeyWorks', true);
+    case 'unstale':
+      log.appendLine(`${now()} [key] 矢印キーの印が残っていましたが、fn が押されたので録音します`);
       break;
     case 'stale':
       log.appendLine(`${now()} [key] 矢印キーなどの直後のため、fn の印が消えるまで録音を始めません`);
