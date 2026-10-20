@@ -122,7 +122,7 @@ function onHelperLine(line) {
       log.appendLine(`${now()} [key] 矢印キーの印が残っていましたが、fn が押されたので録音します`);
       break;
     case 'stale':
-      log.appendLine(`${now()} [key] 矢印キーなどの直後のため、fn の印が消えるまで録音を始めません`);
+      log.appendLine(`${now()} [key] 矢印キーなどで立った fn の印なので録音しません（印が消えるまで数秒は fn も効きません）`);
       break;
     case 'down':
       if (cfg('hotkey') === 'off') return;

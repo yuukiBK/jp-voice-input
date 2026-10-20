@@ -180,52 +180,57 @@ let (keyMask, otherMods): (UInt64, CGEventFlags) = {
     default: return (CGEventFlags.maskSecondaryFn.rawValue, [.maskCommand, .maskControl, .maskShift, .maskAlternate])
     }
 }()
-// fn と一緒に押されがちなキー（矢印・Home/End・PageUp/Down・Delete・F1〜F12）。押されたら取り消す
-let comboKeys: [CGKeyCode] = [123, 124, 125, 126, 115, 119, 116, 121, 117, 51,
-                              122, 120, 99, 118, 96, 97, 98, 100, 101, 109, 103, 111]
+// fn・矢印キーの見分け方（実測にもとづく）:
+// - fn を押す: fn の印が立つと同時に「修飾キーが動いた」イベント（flagsChanged）が来る
+// - 矢印キーなどを押す: fn の印は立つが、来るのは「普通のキーが押された」イベント（keyDown）だけ。
+//   離したあとも印が数秒残る
+// - キーの押下状態（keyState）はこの環境では取れない（矢印キーもキーコード63も常に false）ので使わない
 var held = false
-// macOS は矢印キーなどを押すと fn の印（maskSecondaryFn）も立て、離したあとも次のキー操作まで残す（数秒残ることもある）。
-// その残った印を fn と取り違えないよう、印が立っている間に矢印などを見たら、印が一度消えるまで録音を始めない
-var stale = false
+var prevDown = false
+var stale = false  // 矢印キーなどで立った印が残っている
+var lastModAge = Double.greatestFiniteMagnitude
+var lastKeyAge = Double.greatestFiniteMagnitude
 
 let timer = DispatchSource.makeTimerSource(queue: .main)
 timer.schedule(deadline: .now(), repeating: .milliseconds(25))
-// 修飾キー（fn など）が最後に動いてからの秒数。矢印キーでは動かないので、矢印キーで残った fn の印と、
-// 本当に fn を押したことを見分けるのに使う（キーコード 63 の押下状態は実際には取れなかったので使わない）
-var lastFlagsAge = Double.greatestFiniteMagnitude
-var comboSeenAt = Date.distantPast  // 矢印キーなどを最後に見た時刻
-
 timer.setEventHandler {
-    let flags = CGEventSource.flagsState(.combinedSessionState)
+    let src = CGEventSourceStateID.combinedSessionState
+    let flags = CGEventSource.flagsState(src)
     let down = (flags.rawValue & keyMask) != 0
-    let combo = comboKeys.contains { CGEventSource.keyState(.combinedSessionState, key: $0) }
-    let age = CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: .flagsChanged)
-    if combo { comboSeenAt = Date() }
-    // 前回見たときより新しい修飾キーの動きがあり、それが矢印キーなどを離してから 0.1 秒以上あとに起きた
-    let modifierMoved = age < lastFlagsAge && Date().timeIntervalSince(comboSeenAt) - age > 0.1
-    lastFlagsAge = age
-    if !down {
-        stale = false
-    } else if combo && !held {
-        if !stale { emit("stale") }
-        stale = true
-    } else if stale && modifierMoved && !combo {
-        // 矢印キーの印が残っている間に fn が押された
-        stale = false
-        emit("unstale")
+    let alone = flags.intersection(otherMods).isEmpty
+    let modAge = CGEventSource.secondsSinceLastEventType(src, eventType: .flagsChanged)
+    let keyAge = CGEventSource.secondsSinceLastEventType(src, eventType: .keyDown)
+    let modNew = modAge < lastModAge  // 前回見たときより新しい修飾キーの動き
+    let keyNew = keyAge < lastKeyAge  // 前回見たときより新しい普通のキー入力
+    lastModAge = modAge
+    lastKeyAge = keyAge
+    // いちばん新しい出来事が修飾キーの動きで、しかも今さっき起きた＝修飾キー（fn など）を押した
+    let modifierJustMoved = modAge < 0.2 && modAge < keyAge
+
+    if held {
+        if !down {
+            held = false
+            emit("up")
+        } else if !alone || keyNew {
+            // fn と一緒にほかのキーを押した＝ショートカット操作なので取り消す
+            held = false
+            stale = true
+            emit("abort")
+        }
+    } else if down && alone {
+        if !prevDown || (stale && modNew) {
+            if modifierJustMoved {
+                held = true
+                stale = false
+                emit("down")
+            } else if !stale {
+                stale = true
+                emit("stale")
+            }
+        }
     }
-    let alone = flags.intersection(otherMods).isEmpty && !combo
-    if !held && down && alone && !stale {
-        held = true
-        emit("down")
-    } else if held && !down {
-        held = false
-        emit("up")
-    } else if held && !alone {
-        // 他のキーと組み合わせた＝ショートカット操作なので取り消す
-        held = false
-        emit("abort")
-    }
+    if !down { stale = false }
+    prevDown = down
 }
 timer.resume()
 
